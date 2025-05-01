@@ -1,7 +1,7 @@
 import weakref
 import numpy as np
 import contextlib
-import dezero
+from . import cuda
 
 
 # =============================================================================
@@ -90,7 +90,7 @@ class Variable:
 
     def backward(self, retain_grad=False, create_graph=False):
         if self.grad is None:
-            xp = dezero.cuda.get_array_module(self.data)
+            xp = cuda.get_array_module(self.data)
             self.grad = Variable(xp.ones_like(self.data))
 
         funcs = []
@@ -138,7 +138,7 @@ class Variable:
     def reshape(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
             shape = shape[0]
-        return dezero.functions.reshape(self, shape)
+        return functions.reshape(self, shape)
 
     def transpose(self, *axes):
         if len(axes) == 0:
@@ -146,22 +146,22 @@ class Variable:
         elif len(axes) == 1:
             if isinstance(axes[0], (tuple, list)) or axes[0] is None:
                 axes = axes[0]
-        return dezero.functions.transpose(self, axes)
+        return functions.transpose(self, axes)
 
     @property
     def T(self):
-        return dezero.functions.transpose(self)
+        return functions.transpose(self)
 
     def sum(self, axis=None, keepdims=False):
-        return dezero.functions.sum(self, axis, keepdims)
+        return functions.sum(self, axis, keepdims)
 
     def to_cpu(self):
         if self.data is not None:
-            self.data = dezero.cuda.as_numpy(self.data)
+            self.data = cuda.as_numpy(self.data)
 
     def to_gpu(self):
         if self.data is not None:
-            self.data = dezero.cuda.as_cupy(self.data)
+            self.data = cuda.as_cupy(self.data)
 
 
 class Parameter(Variable):
@@ -218,13 +218,13 @@ class Add(Function):
     def backward(self, gy):
         gx0, gx1 = gy, gy
         if self.x0_shape != self.x1_shape:  # for broadcaset
-            gx0 = dezero.functions.sum_to(gx0, self.x0_shape)
-            gx1 = dezero.functions.sum_to(gx1, self.x1_shape)
+            gx0 = functions.sum_to(gx0, self.x0_shape)
+            gx1 = functions.sum_to(gx1, self.x1_shape)
         return gx0, gx1
 
 
 def add(x0, x1):
-    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
+    x1 = as_array(x1, cuda.get_array_module(x0.data))
     return Add()(x0, x1)
 
 
@@ -238,13 +238,13 @@ class Mul(Function):
         gx0 = gy * x1
         gx1 = gy * x0
         if x0.shape != x1.shape:  # for broadcast
-            gx0 = dezero.functions.sum_to(gx0, x0.shape)
-            gx1 = dezero.functions.sum_to(gx1, x1.shape)
+            gx0 = functions.sum_to(gx0, x0.shape)
+            gx1 = functions.sum_to(gx1, x1.shape)
         return gx0, gx1
 
 
 def mul(x0, x1):
-    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
+    x1 = as_array(x1, cuda.get_array_module(x0.data))
     return Mul()(x0, x1)
 
 
@@ -270,18 +270,18 @@ class Sub(Function):
         gx0 = gy
         gx1 = -gy
         if self.x0_shape != self.x1_shape:  # for broadcast
-            gx0 = dezero.functions.sum_to(gx0, self.x0_shape)
-            gx1 = dezero.functions.sum_to(gx1, self.x1_shape)
+            gx0 = functions.sum_to(gx0, self.x0_shape)
+            gx1 = functions.sum_to(gx1, self.x1_shape)
         return gx0, gx1
 
 
 def sub(x0, x1):
-    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
+    x1 = as_array(x1, cuda.get_array_module(x0.data))
     return Sub()(x0, x1)
 
 
 def rsub(x0, x1):
-    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
+    x1 = as_array(x1, cuda.get_array_module(x0.data))
     return Sub()(x1, x0)
 
 
@@ -295,18 +295,18 @@ class Div(Function):
         gx0 = gy / x1
         gx1 = gy * (-x0 / x1 ** 2)
         if x0.shape != x1.shape:  # for broadcast
-            gx0 = dezero.functions.sum_to(gx0, x0.shape)
-            gx1 = dezero.functions.sum_to(gx1, x1.shape)
+            gx0 = functions.sum_to(gx0, x0.shape)
+            gx1 = functions.sum_to(gx1, x1.shape)
         return gx0, gx1
 
 
 def div(x0, x1):
-    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
+    x1 = as_array(x1, cuda.get_array_module(x0.data))
     return Div()(x0, x1)
 
 
 def rdiv(x0, x1):
-    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
+    x1 = as_array(x1, cuda.get_array_module(x0.data))
     return Div()(x1, x0)
 
 
@@ -330,6 +330,7 @@ def pow(x, c):
 
 
 def setup_variable():
+    from . import functions
     Variable.__add__ = add
     Variable.__radd__ = add
     Variable.__mul__ = mul
@@ -340,9 +341,9 @@ def setup_variable():
     Variable.__truediv__ = div
     Variable.__rtruediv__ = rdiv
     Variable.__pow__ = pow
-    Variable.__getitem__ = dezero.functions.get_item
+    Variable.__getitem__ = functions.get_item
 
-    Variable.matmul = dezero.functions.matmul
-    Variable.dot = dezero.functions.matmul
-    Variable.max = dezero.functions.max
-    Variable.min = dezero.functions.min
+    Variable.matmul = functions.matmul
+    Variable.dot = functions.matmul
+    Variable.max = functions.max
+    Variable.min = functions.min
