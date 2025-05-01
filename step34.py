@@ -1,6 +1,5 @@
-if '__file__' in globals():
-    import os, sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import sys
+sys.path.append("/Users/yechan/Downloads/인공지능 특론")
 import numpy as np
 import matplotlib.pyplot as plt
 from dezero import Variable
